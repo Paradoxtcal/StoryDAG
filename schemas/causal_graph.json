@@ -1,0 +1,47 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "CausalNarrativeGraph",
+  "description": "DAG of narrated events with typed causal edges (CNGE output)",
+  "type": "object",
+  "required": ["nodes", "edges"],
+  "properties": {
+    "nodes": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["node_id", "label", "type"],
+        "properties": {
+          "node_id": { "type": "string" },
+          "label": { "type": "string" },
+          "type": {
+            "type": "string",
+            "enum": ["event", "intention", "revelation", "emotional_state"]
+          },
+          "source_ids": {
+            "type": "array",
+            "items": { "type": "string" },
+            "description": "Original chunk IDs merged during coreference resolution"
+          }
+        }
+      }
+    },
+    "edges": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["edge_id", "source", "target", "type"],
+        "properties": {
+          "edge_id": { "type": "string" },
+          "source": { "type": "string" },
+          "target": { "type": "string" },
+          "type": {
+            "type": "string",
+            "enum": ["motivates", "informs", "emotionally_causes"]
+          },
+          "strength": { "type": "number", "default": 1.0 },
+          "condition": { "type": "string" }
+        }
+      }
+    }
+  }
+}

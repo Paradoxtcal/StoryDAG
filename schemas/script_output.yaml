@@ -1,0 +1,17 @@
+# StoryDAG script output schema (placeholder)
+# Full implementation in serialization module (PR to follow)
+#
+# title: string
+# acts:
+#   - act: 1
+#     scenes:
+#       - scene_id: S01
+#         setting: "..."
+#         satisfied_edges: [e001, e002]
+#         beats:
+#           - description: "..."
+#             characters:
+#               - character: "Alice"
+#                 type: dialogue
+#                 text: "..."
+#                 causal_backlink: [e001]
