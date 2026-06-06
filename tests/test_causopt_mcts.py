@@ -7,13 +7,13 @@ from storydag.causopt.mcts import (
     cluster_ready_nodes,
     expand,
     generate_expansions,
-    greedy_rollout,
     search,
     select,
     topological_order,
     uct_value,
 )
 from storydag.causopt.models import CausalDAG, DramaticObjectives, is_valid_assignment
+from storydag.causopt.rollout import greedy_rollout
 from storydag.cnge.graph import build_dag
 from storydag.cnge.types import GraphEdge, GraphNode
 
@@ -100,8 +100,7 @@ def test_select_stops_at_unexpanded_node():
 
 def test_greedy_rollout_completes_chain():
     dag = _chain_dag()
-    root = MCTSNode(scenes=[])
-    assignment = greedy_rollout(dag, root)
+    assignment = greedy_rollout(dag, [], DramaticObjectives())
     assert assignment == [["n1"], ["n2"], ["n3"]]
     assert is_valid_assignment(dag, assignment)
 
