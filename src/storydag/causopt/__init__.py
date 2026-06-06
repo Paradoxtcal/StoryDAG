@@ -1,5 +1,6 @@
 """CausOpt: Hard-constrained causality-aware script ordering (MCTS-HP)."""
 
+from storydag.causopt.mcts import MCTSConfig, MCTSNode, search
 from storydag.causopt.models import (
     CausalDAG,
     DAGEdge,
@@ -14,6 +15,8 @@ from storydag.causopt.models import (
 )
 
 __all__ = [
+    "MCTSConfig",
+    "MCTSNode",
     "CausalDAG",
     "DAGEdge",
     "DAGNode",
@@ -24,4 +27,5 @@ __all__ = [
     "default_sigmoid_pacing",
     "is_valid_assignment",
     "node_scene_index",
+    "search",
 ]
