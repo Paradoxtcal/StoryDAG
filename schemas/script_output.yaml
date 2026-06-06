@@ -1,17 +1,67 @@
-# StoryDAG script output schema (placeholder)
-# Full implementation in serialization module (PR to follow)
+# StoryDAG Script Output Schema (v1.0)
 #
-# title: string
-# acts:
-#   - act: 1
-#     scenes:
-#       - scene_id: S01
-#         setting: "..."
-#         satisfied_edges: [e001, e002]
-#         beats:
-#           - description: "..."
-#             characters:
-#               - character: "Alice"
-#                 type: dialogue
-#                 text: "..."
-#                 causal_backlink: [e001]
+# 设计目标：将 CausOpt 场景排序 + CGCA 角色生成 组装为
+# 「可拍、可审、可自动度量」的剧本 YAML 工件。
+#
+# ── 根级字段 ──────────────────────────────────────────────
+#
+# title (required)
+#   改编项目标识，对应 outputs/{title}/ 目录，便于批量评测与版本对比。
+#
+# metadata (optional)
+#   schema_version — 模式版本，支持后续向后兼容演进
+#   causopt_score  — CausOpt MCTS 最优分数，记录排序质量基线
+#   source_graph   — 来源因果图路径（如 causal_graph.json），建立剧本↔图溯源链
+#
+# acts (required)
+#   三幕结构容器。按 CausOpt act_proportions 划分，使节奏指标（PR #14）
+#   可直接按幕统计场景分布，无需重新推断幕边界。
+#
+# ── act.scenes[] ─────────────────────────────────────────
+#
+# scene_id (required)
+#   场景唯一 ID（S01, S02…），与 CausOpt SceneRecord 一一对应。
+#
+# setting (required)
+#   可拍性字段：场景物理环境描述，供制片与分镜直接使用。
+#
+# act (required)
+#   所属幕号（冗余但必要）：支持 YAML 片段抽取与非连续幕重排时
+#   单独校验因果序，不必回溯 acts 树结构。
+#
+# satisfied_edges (required)
+#   【CCR 核心字段】本场景满足的因果边 ID 列表。
+#   定义：边 e=(u→v) 被满足 ⟺ v 的 assigned_node 出现在本场景，
+#   且 u 所在场景索引 < v 所在场景索引（由 CausOpt 硬约束保证）。
+#   PR #14 据此计算 Causal Closure Ratio，无需重新解析剧本语义。
+#
+# assigned_node_ids (required)
+#   本场景承载的 CNGE 因果图节点 ID。建立剧本场景↔因果 DAG 节点的
+#   双向链接，支持图编辑后局部重生成。
+#
+# narrative_time_clue (required)
+#   {earliest, latest} — 场景节点在 DAG 拓扑序中的索引范围。
+#   用于 flashback / 平行叙事重排后的「叙事时序」审计：
+#   剧本位置可与 narrative_time 不一致，但 clue 保留原始因果时序证据。
+#
+# beats (required)
+#   场景内叙事节拍。比 scene 更细粒度，对应制片脚本中的「节拍/段落」，
+#   将同一场景的多轮对话拆为可独立审核的单元。
+#
+# ── beats[].characters[] ─────────────────────────────────
+#
+# character (required)
+#   角色名，与 CNGE 图节点 label 及 CGCA history 中的角色一致。
+#
+# type (required: dialogue | action)
+#   dialogue — 可听台词；action — 可拍动作。区分留存性审计维度
+#   （台词因果 vs 行为因果）并对接后续分镜流。
+#
+# text (required)
+#   最终生成文本（经 CGCA 软门控 + 硬黑名单）。
+#
+# causal_backlink (required)
+#   【角色一致性核心字段】该台词/动作所依据的因果边 ID 列表。
+#   来源于 CGCA 生成时激活的 history edges（motivates / informs）。
+#   PR #14 据此验证：角色台词所声称的知识/动机是否有因果边授权，
+#   且授权边的拓扑序不晚于当前场景。
