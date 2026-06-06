@@ -1,7 +1,7 @@
-"""Data types for CNGE causal triple extraction."""
+"""Data types for CNGE causal triple extraction and graph assembly."""
 
-from dataclasses import dataclass
-from typing import Literal
+from dataclasses import dataclass, field
+from typing import List, Literal
 
 EdgeType = Literal["motivates", "informs", "emotionally_causes"]
 NodeType = Literal["event", "intention", "revelation", "emotional_state"]
@@ -21,3 +21,24 @@ class CausalTriple:
     target_id: str
     target_label: str
     target_type: str
+
+
+@dataclass
+class GraphNode:
+    """A canonical narrative node after coreference resolution."""
+
+    node_id: str
+    label: str
+    type: str
+    source_ids: List[str] = field(default_factory=list)
+
+
+@dataclass(frozen=True)
+class GraphEdge:
+    """A deduplicated causal edge between canonical nodes."""
+
+    edge_id: str
+    source: str
+    target: str
+    type: str
+    strength: float = 1.0
