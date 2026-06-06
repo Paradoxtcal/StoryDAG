@@ -11,9 +11,9 @@ from storydag.causopt.models import (
     CausalDAG,
     DramaticObjectives,
     SceneAssignment,
-    build_partial_sequence,
     is_valid_assignment,
 )
+from storydag.causopt.scoring import evaluate_assignment
 
 EvaluateFn = Callable[[CausalDAG, SceneAssignment, DramaticObjectives], float]
 
@@ -218,32 +218,14 @@ def expand(
     return child
 
 
-def greedy_rollout(
+def _rollout_from_node(
     dag: CausalDAG,
     node: MCTSNode,
-) -> SceneAssignment:
-    """Deterministic rollout placeholder; replaced by full scorer in PR #9."""
-    assignment = [list(scene) for scene in node.scenes]
-    assigned = node.assigned_nodes.copy()
-
-    while assigned != dag.node_ids:
-        ready = dag.ready_nodes(assigned)
-        if not ready:
-            break
-        next_node = max(ready, key=lambda node_id: (dramatic_weight(dag, node_id), node_id))
-        assignment.append([next_node])
-        assigned.add(next_node)
-    return assignment
-
-
-def placeholder_evaluate(
-    dag: CausalDAG,
-    assignment: SceneAssignment,
     objectives: DramaticObjectives,
-) -> float:
-    """Minimal evaluation for MCTS backprop until PR #9 scoring lands."""
-    del objectives
-    return 1.0 if is_valid_assignment(dag, assignment) else 0.0
+) -> SceneAssignment:
+    from storydag.causopt.rollout import greedy_rollout
+
+    return greedy_rollout(dag, node.scenes, objectives)
 
 
 def backpropagate(node: MCTSNode, score: float) -> None:
@@ -265,7 +247,7 @@ def search(
     """Run MCTS-HP and return the best valid scene assignment found."""
     objectives = objectives or DramaticObjectives()
     config = config or MCTSConfig()
-    evaluate = evaluate_fn or placeholder_evaluate
+    evaluate = evaluate_fn or evaluate_assignment
 
     root = MCTSNode(scenes=[])
     best_assignment: Optional[SceneAssignment] = None
@@ -281,7 +263,7 @@ def search(
             rollout_assignment = [list(scene) for scene in leaf.scenes]
         else:
             leaf = expand(dag, leaf, objectives, config)
-            rollout_assignment = greedy_rollout(dag, leaf)
+            rollout_assignment = _rollout_from_node(dag, leaf, objectives)
 
         score = evaluate(dag, rollout_assignment, objectives)
         backpropagate(leaf, score)
@@ -293,7 +275,7 @@ def search(
     if best_assignment is not None:
         return best_assignment
 
-    fallback = greedy_rollout(dag, root)
+    fallback = _rollout_from_node(dag, root, objectives)
     if is_valid_assignment(dag, fallback):
         return fallback
     raise RuntimeError("MCTS failed to find a valid scene assignment")
