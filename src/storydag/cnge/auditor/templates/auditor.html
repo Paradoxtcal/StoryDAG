@@ -1,0 +1,819 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>StoryDAG Auditor — 因果图审计面板</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/vis-network/9.1.6/standalone/umd/vis-network.min.js">
+</script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/remixicon/4.5.0/remixicon.min.css">
+<style>
+:root {
+  --cream-50: #FDFCF8;
+  --cream-100: #FAF8F0;
+  --cream-200: #F5F1E6;
+  --cream-300: #EFEAD8;
+  --cream-400: #E5DEC8;
+  --cream-500: #D4CBB0;
+  --warm-brown: #5C4A3A;
+  --warm-dark: #3D3128;
+  --warm-sand: #C4B49A;
+  --warm-stone: #8B7E6E;
+  --owl-primary: #6B5B4F;
+  --owl-dark: #4A3F36;
+}
+
+* { margin: 0; padding: 0; box-sizing: border-box; }
+html { font-family: 'Inter', system-ui, sans-serif; scroll-behavior: smooth; }
+body {
+  background-color: var(--cream-100);
+  color: var(--warm-dark);
+  -webkit-font-smoothing: antialiased;
+  min-height: 100vh;
+}
+input, textarea, select { outline: none; font-family: inherit; }
+::placeholder { color: var(--warm-sand); opacity: 0.7; }
+::selection { background: var(--cream-500); color: var(--warm-dark); }
+
+/* ── Layout ────────────────────────────────── */
+.app-shell {
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+}
+
+/* ── Navbar ────────────────────────────────── */
+.navbar {
+  background: rgba(253, 252, 248, 0.92);
+  backdrop-filter: blur(20px);
+  border-bottom: 1px solid rgba(212, 203, 176, 0.3);
+  padding: 0 24px;
+  height: 56px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-shrink: 0;
+  z-index: 100;
+}
+.navbar-brand {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  text-decoration: none;
+  color: var(--warm-dark);
+}
+.navbar-icon {
+  width: 28px; height: 28px;
+  border-radius: 50%;
+  border: 1.5px solid var(--warm-brown);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.navbar-icon svg { width: 14px; height: 14px; color: var(--warm-brown); }
+.navbar-title {
+  font-size: 16px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+}
+.navbar-sub {
+  font-size: 12px;
+  color: var(--warm-stone);
+  font-weight: 400;
+  margin-left: 2px;
+}
+.navbar-actions { display: flex; align-items: center; gap: 8px; }
+
+/* ── Toolbar ───────────────────────────────── */
+.toolbar {
+  background: var(--cream-50);
+  border-bottom: 1px solid rgba(212, 203, 176, 0.2);
+  padding: 8px 24px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+  flex-wrap: wrap;
+}
+.toolbar-sep {
+  width: 1px; height: 24px;
+  background: var(--cream-400);
+  margin: 0 4px;
+}
+
+/* ── Main area ─────────────────────────────── */
+.main-area {
+  display: flex;
+  flex: 1;
+  overflow: hidden;
+}
+
+/* ── Graph canvas ──────────────────────────── */
+.canvas-pane {
+  flex: 1;
+  position: relative;
+  background: var(--cream-100);
+}
+#network { width: 100%; height: 100%; }
+.empty-state {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 16px;
+  color: var(--warm-stone);
+}
+.empty-state h2 {
+  font-size: 20px;
+  font-weight: 500;
+  color: var(--warm-dark);
+}
+.empty-state p { font-size: 13px; }
+
+/* ── Side panel ────────────────────────────── */
+.side-panel {
+  width: 320px;
+  background: var(--cream-50);
+  border-left: 1px solid rgba(212, 203, 176, 0.25);
+  display: flex;
+  flex-direction: column;
+  flex-shrink: 0;
+  overflow-y: auto;
+}
+.panel-section {
+  padding: 16px 20px;
+  border-bottom: 1px solid rgba(212, 203, 176, 0.15);
+}
+.panel-title {
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--warm-stone);
+  margin-bottom: 12px;
+}
+.panel-empty {
+  font-size: 13px;
+  color: var(--warm-sand);
+  font-style: italic;
+}
+.panel-info-row {
+  font-size: 13px;
+  color: var(--warm-stone);
+  margin-bottom: 4px;
+}
+.panel-info-row strong { color: var(--warm-dark); font-weight: 500; }
+
+/* ── Form controls ─────────────────────────── */
+.form-group { margin-bottom: 12px; }
+.form-label {
+  display: block;
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--warm-stone);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  margin-bottom: 4px;
+}
+.input-underline {
+  width: 100%;
+  border: none;
+  border-bottom: 1px solid var(--cream-400);
+  background: transparent;
+  padding: 6px 0 4px;
+  font-size: 13px;
+  color: var(--warm-dark);
+  transition: border-color 0.25s ease;
+}
+.input-underline:focus { border-bottom-color: var(--warm-brown); }
+select.input-underline { cursor: pointer; }
+
+/* ── Buttons ───────────────────────────────── */
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  border: none;
+  cursor: pointer;
+  font-family: inherit;
+  font-size: 12px;
+  font-weight: 500;
+  border-radius: 9999px;
+  padding: 6px 14px;
+  transition: all 0.25s ease;
+  white-space: nowrap;
+}
+.btn:hover { transform: translateY(-1px); }
+.btn-primary {
+  background: var(--warm-dark);
+  color: var(--cream-50);
+}
+.btn-primary:hover { background: var(--owl-dark); }
+.btn-secondary {
+  background: var(--cream-200);
+  color: var(--warm-brown);
+}
+.btn-secondary:hover { background: var(--cream-300); }
+.btn-danger {
+  background: #F5E6E4;
+  color: #A05040;
+}
+.btn-danger:hover { background: #EFD8D4; }
+.btn-sm { padding: 4px 10px; font-size: 11px; }
+.btn-icon {
+  width: 32px; height: 32px;
+  padding: 0;
+  border-radius: 50%;
+  background: var(--cream-200);
+  color: var(--warm-brown);
+}
+.btn-icon:hover { background: var(--cream-300); }
+.btn-icon i { font-size: 15px; }
+.btn-icon.active { background: var(--warm-brown); color: var(--cream-50); }
+.btn-add { color: #5A8A5A; background: #E8F0E8; }
+.btn-add:hover { background: #D8E8D8; }
+
+/* ── Output selector ───────────────────────── */
+.output-list {
+  list-style: none;
+  padding: 0;
+}
+.output-list li {
+  padding: 10px 16px;
+  margin: 4px 0;
+  border-radius: 12px;
+  cursor: pointer;
+  font-size: 13px;
+  color: var(--warm-stone);
+  transition: all 0.2s ease;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.output-list li:hover {
+  background: var(--cream-200);
+  color: var(--warm-dark);
+}
+.output-list li i { font-size: 16px; color: var(--warm-brown); }
+
+/* ── Flash messages ────────────────────────── */
+.toast {
+  position: fixed;
+  bottom: 24px;
+  left: 50%;
+  transform: translateX(-50%);
+  background: rgba(61, 49, 40, 0.92);
+  backdrop-filter: blur(12px);
+  color: var(--cream-50);
+  font-size: 13px;
+  padding: 10px 24px;
+  border-radius: 9999px;
+  z-index: 999;
+  opacity: 0;
+  transition: opacity 0.4s ease;
+  pointer-events: none;
+}
+.toast.show { opacity: 1; }
+
+/* ── Scrollbar ─────────────────────────────── */
+::-webkit-scrollbar { width: 4px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: var(--cream-400); border-radius: 4px; }
+
+/* ── Responsive ────────────────────────────── */
+@media (max-width: 768px) {
+  .side-panel { width: 100%; max-height: 40vh; border-left: none; border-top: 1px solid rgba(212,203,176,0.25); }
+  .main-area { flex-direction: column-reverse; }
+  .toolbar { padding: 6px 12px; }
+  .navbar { padding: 0 12px; }
+}
+</style>
+</head>
+<body>
+<div class="app-shell">
+  <!-- Navbar -->
+  <nav class="navbar">
+    <a class="navbar-brand" href="/">
+      <div class="navbar-icon">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"
+             stroke-linecap="round" stroke-linejoin="round">
+          <polygon points="12 2 2 7 12 12 22 7 12 2" />
+          <polyline points="2 17 12 22 22 17" />
+          <polyline points="2 12 12 17 22 12" />
+        </svg>
+      </div>
+      <span class="navbar-title">StoryDAG <span class="navbar-sub">Auditor</span></span>
+    </a>
+    <div class="navbar-actions">
+      <span id="stats-badge" class="panel-info-row"></span>
+    </div>
+  </nav>
+
+  <!-- Toolbar -->
+  <div class="toolbar" id="toolbar" style="display:none;">
+    <button class="btn btn-primary btn-sm" onclick="saveGraph()">
+      <i class="ri-save-line"></i> 保存
+    </button>
+    <div class="toolbar-sep"></div>
+    <button class="btn btn-secondary btn-sm" onclick="addNodeMode()">
+      <i class="ri-node-tree"></i> 添加节点
+    </button>
+    <button class="btn btn-secondary btn-sm" onclick="addEdgeMode()">
+      <i class="ri-share-forward-line"></i> 添加边
+    </button>
+    <div class="toolbar-sep"></div>
+    <button class="btn btn-danger btn-sm" onclick="deleteSelected()">
+      <i class="ri-delete-bin-line"></i> 删除选中
+    </button>
+    <span style="flex:1"></span>
+    <span id="mode-hint" style="font-size:11px;color:var(--warm-sand);"></span>
+  </div>
+
+  <!-- Main -->
+  <div class="main-area">
+    <div class="canvas-pane" id="canvas-pane">
+      <div id="network"></div>
+      <div class="empty-state" id="empty-state">
+        <i class="ri-node-tree" style="font-size:48px;color:var(--cream-400);"></i>
+        <h2>选择因果图</h2>
+        <p>从左侧面板加载已生成的因果图，或通过 API 上传。</p>
+      </div>
+    </div>
+    <div class="side-panel" id="side-panel">
+      <!-- Output selector (shown when no graph) -->
+      <div class="panel-section" id="output-section">
+        <div class="panel-title">生成的因果图</div>
+        <ul class="output-list" id="output-list"></ul>
+      </div>
+
+      <!-- Graph info -->
+      <div class="panel-section" id="info-section" style="display:none;">
+        <div class="panel-title">图信息</div>
+        <div id="info-content"></div>
+      </div>
+
+      <!-- Selection editor -->
+      <div class="panel-section" id="editor-section" style="display:none;">
+        <div class="panel-title" id="editor-title">编辑</div>
+        <div id="editor-content"></div>
+      </div>
+
+      <!-- Legend -->
+      <div class="panel-section">
+        <div class="panel-title">节点类型</div>
+        <div style="display:flex;flex-wrap:wrap;gap:8px;">
+          <span class="tag tag-revelation">revelation</span>
+          <span class="tag tag-intention">intention</span>
+          <span class="tag tag-event">event</span>
+          <span class="tag tag-emotion">emotional_state</span>
+        </div>
+        <div class="panel-title" style="margin-top:12px;">边类型</div>
+        <div style="display:flex;flex-wrap:wrap;gap:8px;">
+          <span class="tag tag-edge-motivates">motivates ━━▶</span>
+          <span class="tag tag-edge-informs">informs ━┅▶</span>
+          <span class="tag tag-edge-emotion">emotionally_causes ┈▶</span>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<style>
+.tag {
+  display: inline-flex;
+  align-items: center;
+  font-size: 11px;
+  font-weight: 500;
+  padding: 2px 10px;
+  border-radius: 9999px;
+  letter-spacing: 0.02em;
+}
+.tag-revelation { background: #F5EDD6; color: #8A7030; }
+.tag-intention   { background: #D6EDED; color: #2A6B6B; }
+.tag-event       { background: #DCE8DC; color: #3A6B3A; }
+.tag-emotion     { background: #F0DEE0; color: #8B4A53; }
+.tag-edge-motivates { background: var(--cream-300); color: var(--warm-dark); font-weight: 400; }
+.tag-edge-informs   { background: var(--cream-300); color: var(--warm-stone); font-weight: 400; }
+.tag-edge-emotion   { background: var(--cream-300); color: var(--warm-sand); font-weight: 400; }
+</style>
+
+<script>
+const INITIAL_GRAPH = {{ initial_graph|safe }};
+const OUTPUTS = {{ outputs|safe }};
+
+let network = null;
+let nodesDataset = null;
+let edgesDataset = null;
+let currentGraph = null;
+let mode = null; // null | 'add-node' | 'add-edge'
+let addEdgeFrom = null;
+
+// ── Node type colours ────────────────────────
+const TYPE_COLORS = {
+  revelation:      { background: '#F5EDD6', border: '#C4A850', highlight: { background: '#F0E4C0', border: '#B89840' } },
+  intention:       { background: '#D6EDED', border: '#5B9B9B', highlight: { background: '#C0E0E0', border: '#4A8A8A' } },
+  event:           { background: '#DCE8DC', border: '#7BA67B', highlight: { background: '#C8DCC8', border: '#6A9A6A' } },
+  emotional_state: { background: '#F0DEE0', border: '#C97B84', highlight: { background: '#E8D0D4', border: '#B86A74' } },
+};
+const EDGE_DASHES = { motivates: false, informs: [6, 4], emotionally_causes: [2, 4] };
+const EDGE_COLORS = { motivates: '#6B5B4F', informs: '#8B7E6E', emotionally_causes: '#9B8E82' };
+
+// ── Init ─────────────────────────────────────
+document.addEventListener('DOMContentLoaded', () => {
+  if (INITIAL_GRAPH && INITIAL_GRAPH.nodes) {
+    loadGraphData(INITIAL_GRAPH);
+  }
+  if (OUTPUTS && OUTPUTS.length > 0) {
+    renderOutputList(OUTPUTS);
+  }
+});
+
+function renderOutputList(outputs) {
+  const list = document.getElementById('output-list');
+  list.innerHTML = outputs.map(o =>
+    `<li onclick="loadOutput('${o.path}')">
+       <i class="ri-file-chart-line"></i>
+       <span>${o.title}</span>
+     </li>`
+  ).join('');
+}
+
+async function loadOutput(path) {
+  try {
+    const resp = await fetch('/api/graph', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ path }),
+    });
+    if (!resp.ok) throw new Error(await resp.text());
+    const data = await resp.json();
+    loadGraphData(data);
+    showToast(`已加载：${path}`);
+  } catch (e) {
+    showToast('加载失败: ' + e.message);
+  }
+}
+
+function loadGraphData(data) {
+  currentGraph = data;
+  document.getElementById('empty-state').style.display = 'none';
+  document.getElementById('toolbar').style.display = 'flex';
+  document.getElementById('output-section').style.display = 'none';
+  document.getElementById('info-section').style.display = 'block';
+
+  nodesDataset = new vis.DataSet(data.nodes.map(n => ({
+    id: n.node_id,
+    label: n.label,
+    title: `<strong>${n.node_id}</strong><br>type: ${n.type}<br>label: ${n.label}`,
+    color: TYPE_COLORS[n.type] || TYPE_COLORS.event,
+    font: { color: '#3D3128', size: 13, face: 'Inter' },
+    shape: 'box',
+    borderWidth: 2,
+    borderWidthSelected: 3,
+  })));
+
+  edgesDataset = new vis.DataSet(data.edges.map(e => ({
+    id: e.edge_id,
+    from: e.source,
+    to: e.target,
+    label: e.type,
+    color: { color: EDGE_COLORS[e.type] || '#8B7E6E', highlight: '#5C4A3A' },
+    dashes: EDGE_DASHES[e.type] || false,
+    width: e.type === 'motivates' ? 2.5 : 1.5,
+    font: { color: '#6B5B4F', size: 11, face: 'Inter', strokeWidth: 0 },
+    smooth: { type: 'curvedCW', roundness: 0.15 },
+    arrows: { to: { enabled: true, scaleFactor: 0.8 } },
+  })));
+
+  const container = document.getElementById('network');
+  const options = {
+    nodes: { margin: { top: 12, bottom: 12, left: 14, right: 14 } },
+    edges: { smooth: { type: 'curvedCW', roundness: 0.15 } },
+    physics: {
+      solver: 'forceAtlas2Based',
+      forceAtlas2Based: { gravitationalConstant: -40, centralGravity: 0.005, springLength: 180, springConstant: 0.02 },
+      stabilization: { iterations: 200 },
+    },
+    interaction: {
+      hover: true,
+      tooltipDelay: 200,
+      navigationButtons: true,
+      keyboard: true,
+    },
+    layout: { improvedLayout: true },
+  };
+
+  network = new vis.Network(container, { nodes: nodesDataset, edges: edgesDataset }, options);
+
+  network.on('click', (params) => {
+    if (mode === 'add-edge') {
+      if (params.nodes.length > 0) {
+        if (!addEdgeFrom) {
+          addEdgeFrom = params.nodes[0];
+          showToast(`选择起点：${addEdgeFrom}，点击目标节点完成`);
+        } else {
+          const from = addEdgeFrom;
+          const to = params.nodes[0];
+          if (from !== to) addEdge(from, to);
+          addEdgeFrom = null;
+          setMode(null);
+        }
+      }
+      return;
+    }
+    if (mode === 'add-node') {
+      // clicked on empty space — place node
+      if (params.nodes.length === 0 && params.pointer) {
+        promptAddNode(params.pointer.canvas);
+      }
+      return;
+    }
+    // normal selection
+    if (params.nodes.length > 0) {
+      showNodeEditor(params.nodes[0]);
+    } else if (params.edges.length > 0) {
+      showEdgeEditor(params.edges[0]);
+    } else {
+      clearEditor();
+    }
+  });
+
+  updateInfo(data);
+  network.selectNodes([]);
+}
+
+// ── Info ─────────────────────────────────────
+function updateInfo(data) {
+  const types = {};
+  data.nodes.forEach(n => { types[n.type] = (types[n.type] || 0) + 1; });
+  const typeSummary = Object.entries(types).map(([k, v]) =>
+    `<span class="tag tag-${k === 'emotional_state' ? 'emotion' : k}" style="font-size:10px;">${k}: ${v}</span>`
+  ).join(' ');
+  document.getElementById('stats-badge').innerHTML =
+    `<span style="font-size:12px;color:var(--warm-stone);">${data.nodes.length} 节点 · ${data.edges.length} 边</span>`;
+  document.getElementById('info-content').innerHTML = `
+    <div class="panel-info-row"><strong>${data.nodes.length}</strong> 节点 · <strong>${data.edges.length}</strong> 边</div>
+    <div style="margin-top:6px;display:flex;flex-wrap:wrap;gap:4px;">${typeSummary}</div>
+  `;
+}
+
+function updateStats() {
+  if (currentGraph) updateInfo(currentGraph);
+}
+
+// ── Node editor ──────────────────────────────
+function showNodeEditor(nodeId) {
+  clearEditor();
+  const node = currentGraph.nodes.find(n => n.node_id === nodeId);
+  if (!node) return;
+  const section = document.getElementById('editor-section');
+  const title = document.getElementById('editor-title');
+  section.style.display = 'block';
+  title.textContent = `节点：${nodeId}`;
+
+  document.getElementById('editor-content').innerHTML = `
+    <div class="form-group">
+      <label class="form-label">Label</label>
+      <input class="input-underline" id="edit-label" value="${escHtml(node.label)}" onchange="updateNodeField('${nodeId}','label',this.value)">
+    </div>
+    <div class="form-group">
+      <label class="form-label">Type</label>
+      <select class="input-underline" id="edit-type" onchange="updateNodeField('${nodeId}','type',this.value)">
+        ${['event','intention','revelation','emotional_state'].map(t =>
+          `<option value="${t}" ${t === node.type ? 'selected' : ''}>${t}</option>`
+        ).join('')}
+      </select>
+    </div>
+    <div style="display:flex;gap:8px;margin-top:12px;">
+      <button class="btn btn-primary btn-sm" onclick="saveGraph()"><i class="ri-save-line"></i> 保存全部</button>
+      <button class="btn btn-danger btn-sm" onclick="deleteNode('${nodeId}')"><i class="ri-delete-bin-line"></i> 删除</button>
+    </div>
+  `;
+}
+
+function updateNodeField(nodeId, field, value) {
+  const node = currentGraph.nodes.find(n => n.node_id === nodeId);
+  if (!node) return;
+  node[field] = value;
+  nodesDataset.update({ id: nodeId, label: node.label,
+    color: TYPE_COLORS[node.type] || TYPE_COLORS.event,
+    title: `<strong>${node.node_id}</strong><br>type: ${node.type}<br>label: ${node.label}`,
+  });
+  updateStats();
+}
+
+// ── Edge editor ──────────────────────────────
+function showEdgeEditor(edgeId) {
+  clearEditor();
+  const edge = currentGraph.edges.find(e => e.edge_id === edgeId);
+  if (!edge) return;
+  const section = document.getElementById('editor-section');
+  const title = document.getElementById('editor-title');
+  section.style.display = 'block';
+  title.textContent = `边：${edgeId}`;
+
+  document.getElementById('editor-content').innerHTML = `
+    <div class="form-group">
+      <label class="form-label">Source → Target</label>
+      <div style="font-size:13px;color:var(--warm-dark);padding:4px 0;">
+        ${escHtml(edge.source)} <i class="ri-arrow-right-line" style="color:var(--warm-sand);font-size:12px;"></i> ${escHtml(edge.target)}
+      </div>
+    </div>
+    <div class="form-group">
+      <label class="form-label">Type</label>
+      <select class="input-underline" id="edit-edge-type" onchange="updateEdgeField('${edgeId}','type',this.value)">
+        ${['motivates','informs','emotionally_causes'].map(t =>
+          `<option value="${t}" ${t === edge.type ? 'selected' : ''}>${t}</option>`
+        ).join('')}
+      </select>
+    </div>
+    <div class="form-group">
+      <label class="form-label">Strength</label>
+      <input class="input-underline" type="number" step="0.1" min="0" max="5"
+             id="edit-strength" value="${edge.strength}"
+             onchange="updateEdgeField('${edgeId}','strength',parseFloat(this.value)||1)">
+    </div>
+    <div style="display:flex;gap:8px;margin-top:12px;">
+      <button class="btn btn-primary btn-sm" onclick="saveGraph()"><i class="ri-save-line"></i> 保存全部</button>
+      <button class="btn btn-danger btn-sm" onclick="deleteEdge('${edgeId}')"><i class="ri-delete-bin-line"></i> 删除</button>
+    </div>
+  `;
+}
+
+function updateEdgeField(edgeId, field, value) {
+  const edge = currentGraph.edges.find(e => e.edge_id === edgeId);
+  if (!edge) return;
+  edge[field] = value;
+  edgesDataset.update({
+    id: edgeId,
+    color: { color: EDGE_COLORS[edge.type] || '#8B7E6E', highlight: '#5C4A3A' },
+    dashes: EDGE_DASHES[edge.type] || false,
+    width: edge.type === 'motivates' ? 2.5 : 1.5,
+    label: edge.type,
+  });
+}
+
+function clearEditor() {
+  document.getElementById('editor-section').style.display = 'none';
+  document.getElementById('editor-content').innerHTML = '';
+}
+
+// ── Save ─────────────────────────────────────
+async function saveGraph() {
+  if (!currentGraph) return;
+  try {
+    // rebuild topological order
+    try { currentGraph.topological_order = computeTopo(currentGraph); } catch(_) {}
+    const resp = await fetch('/api/graph/save', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(currentGraph),
+    });
+    if (!resp.ok) throw new Error(await resp.text());
+    showToast('已保存');
+  } catch (e) {
+    showToast('保存失败: ' + e.message);
+  }
+}
+
+function computeTopo(graph) {
+  const edges = graph.edges;
+  const indeg = {}; const adj = {};
+  graph.nodes.forEach(n => { indeg[n.node_id] = 0; adj[n.node_id] = []; });
+  edges.forEach(e => {
+    adj[e.source] = adj[e.source] || [];
+    adj[e.source].push(e.target);
+    indeg[e.target] = (indeg[e.target] || 0) + 1;
+  });
+  const queue = Object.keys(indeg).filter(id => indeg[id] === 0).sort();
+  const order = [];
+  while (queue.length) {
+    const n = queue.shift();
+    order.push(n);
+    (adj[n]||[]).forEach(t => {
+      indeg[t]--;
+      if (indeg[t] === 0) queue.push(t);
+      queue.sort();
+    });
+  }
+  return order;
+}
+
+// ── Delete ──────────────────────────────────
+async function deleteNode(nodeId) {
+  if (!confirm(`确定删除节点 ${nodeId} 及其所有边？`)) return;
+  try {
+    const resp = await fetch(`/api/graph/node/${nodeId}`, { method: 'DELETE' });
+    if (!resp.ok) throw new Error(await resp.text());
+    nodesDataset.remove(nodeId);
+    edgesDataset.get().filter(e => e.from === nodeId || e.to === nodeId).forEach(e => edgesDataset.remove(e.id));
+    currentGraph.nodes = currentGraph.nodes.filter(n => n.node_id !== nodeId);
+    currentGraph.edges = currentGraph.edges.filter(e => e.source !== nodeId && e.target !== nodeId);
+    clearEditor();
+    updateStats();
+    showToast(`已删除 ${nodeId}`);
+  } catch (e) { showToast('删除失败: ' + e.message); }
+}
+
+async function deleteEdge(edgeId) {
+  if (!confirm(`确定删除边 ${edgeId}？`)) return;
+  try {
+    const resp = await fetch(`/api/graph/edge/${edgeId}`, { method: 'DELETE' });
+    if (!resp.ok) throw new Error(await resp.text());
+    edgesDataset.remove(edgeId);
+    currentGraph.edges = currentGraph.edges.filter(e => e.edge_id !== edgeId);
+    clearEditor();
+    updateStats();
+    showToast(`已删除 ${edgeId}`);
+  } catch (e) { showToast('删除失败: ' + e.message); }
+}
+
+function deleteSelected() {
+  const sel = network.getSelection();
+  if (sel.nodes.length > 0) deleteNode(sel.nodes[0]);
+  else if (sel.edges.length > 0) deleteEdge(sel.edges[0]);
+  else showToast('未选中任何元素');
+}
+
+// ── Add node ────────────────────────────────
+function addNodeMode() {
+  if (mode === 'add-node') { setMode(null); return; }
+  setMode('add-node');
+  showToast('点击画布空白处添加节点');
+}
+
+function promptAddNode(canvasPos) {
+  const label = prompt('节点标签：');
+  if (!label || !label.trim()) return;
+  const nodeId = `n${(currentGraph.nodes.length + 1)}`;
+  const type = 'event';
+  const node = { node_id: nodeId, label: label.trim(), type: type, source_ids: [] };
+  currentGraph.nodes.push(node);
+  nodesDataset.add({
+    id: nodeId, label: node.label, color: TYPE_COLORS[type],
+    title: `<strong>${nodeId}</strong><br>type: ${type}<br>label: ${node.label}`,
+    shape: 'box', font: { color: '#3D3128', size: 13, face: 'Inter' },
+    borderWidth: 2,
+  });
+  updateStats();
+  showToast(`已添加节点 ${nodeId}`);
+}
+
+// ── Add edge ─────────────────────────────────
+function addEdgeMode() {
+  if (mode === 'add-edge') { setMode(null); return; }
+  setMode('add-edge');
+  addEdgeFrom = null;
+  showToast('点击一个源节点，再点击目标节点');
+}
+
+function addEdge(from, to) {
+  const etypes = ['motivates', 'informs', 'emotionally_causes'];
+  const type = prompt(`边类型 (${etypes.join(', ')})：`, 'motivates');
+  if (!type || !etypes.includes(type)) { showToast('取消或类型无效'); return; }
+  const edgeId = `e${(currentGraph.edges.length + 1)}`;
+  const edge = { edge_id: edgeId, source: from, target: to, type, strength: 1.0 };
+  currentGraph.edges.push(edge);
+  edgesDataset.add({
+    id: edgeId, from, to, label: type,
+    color: { color: EDGE_COLORS[type] || '#8B7E6E', highlight: '#5C4A3A' },
+    dashes: EDGE_DASHES[type] || false,
+    width: type === 'motivates' ? 2.5 : 1.5,
+    font: { color: '#6B5B4F', size: 11, face: 'Inter', strokeWidth: 0 },
+    smooth: { type: 'curvedCW', roundness: 0.15 },
+    arrows: { to: { enabled: true, scaleFactor: 0.8 } },
+  });
+  updateStats();
+  showToast(`已添加边 ${edgeId}: ${from} → ${to}`);
+}
+
+// ── Mode ─────────────────────────────────────
+function setMode(m) {
+  mode = m;
+  document.getElementById('mode-hint').textContent = m === 'add-node' ? '点击空白添加节点' :
+    m === 'add-edge' ? '先点源节点，再点目标节点' : '';
+  // toggle toolbar button active state
+  document.querySelectorAll('.toolbar .btn').forEach(b => b.classList.remove('active'));
+}
+
+// ── Utilities ────────────────────────────────
+function escHtml(s) { return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+
+function showToast(msg) {
+  const el = document.getElementById('toast');
+  el.textContent = msg;
+  el.classList.add('show');
+  clearTimeout(el._timer);
+  el._timer = setTimeout(() => el.classList.remove('show'), 2500);
+}
+</script>
+</body>
+</html>
