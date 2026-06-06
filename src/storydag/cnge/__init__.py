@@ -1,6 +1,7 @@
 """CNGE: Causal Narrative Graph Extraction."""
 
 from storydag.cnge.coref import resolve_coreferences
+from storydag.cnge.graph import CausalGraph, RemovedCycleEdge, build_dag
 from storydag.cnge.extractor import (
     CausalExtractionError,
     extract_novel_triples,
@@ -14,13 +15,16 @@ from storydag.cnge.types import CausalTriple, EDGE_TYPES, GraphEdge, GraphNode, 
 
 __all__ = [
     "CausalExtractionError",
+    "CausalGraph",
     "CausalTriple",
     "Chapter",
     "EDGE_TYPES",
     "GraphEdge",
     "GraphNode",
     "NODE_TYPES",
+    "RemovedCycleEdge",
     "Scene",
+    "build_dag",
     "resolve_coreferences",
     "extract_novel_triples",
     "extract_triples",
