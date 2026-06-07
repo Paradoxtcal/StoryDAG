@@ -4,6 +4,10 @@
 
 将长篇小说自动转化为结构化的、因果可审计的多幕剧本。管线由四个算法模块构成，每个模块产出可独立验证的中间工件。
 
+<p align="center">
+  <video src="https://raw.githubusercontent.com/Paradoxtcal/StoryDAG/feature/17-readme-demo/storydag_demo.mp4" controls width="100%"></video>
+</p>
+
 ---
 
 ## Architecture
@@ -80,7 +84,8 @@ outputs/{title}/
 | Chapter Segmentation | `segmentation.segment_novel()` | 正则匹配 `第X章` 标题，若无则整篇作为一章 |
 | Scene Segmentation | `segmentation.segment_scenes()` | 空行、分隔线、时间跳跃标记（`第二天`、`数年后` 等）作为场景边界 |
 | Triple Extraction | `extractor.extract_triples()` | 每场景送 LLM，`json_mode=True` 获取结构化三元组，枚举类型校验 |
-| Coreference Resolution | `coref.resolve_coreferences()` | sentence-transformers 编码节点 label，余弦相似度 >0.85 union-find 聚类合并 |
+| Coreference Resolution | `coref.resolve_coreferences()` | 节点 label 编码 → 余弦相似度 >0.85 union-find 聚类。编码方式由 `EMBEDDING_MODEL` 配置 |
+| Character Discovery | `pipeline.discover_characters()` | 数据驱动 LCP（最长公共前缀）推断角色名，避免截断。亦可由 `CHARACTER_LIST` 显式指定 |
 | DAG Construction | `graph.build_dag()` | networkx 构建有向图，迭代移除最弱边直到无环 + topological_sort |
 
 ### CausOpt — Hard-Constrained Scene Ordering
@@ -144,13 +149,44 @@ pip install -e ".[local-llm]"
 配置 `.env`（参照 [`.env.example`](.env.example)）：
 
 ```bash
+# 必须
 OPENAI_API_KEY=sk-...
-OPENAI_BASE_URL=https://api.openai.com/v1
-LLM_MODEL=gpt-4-turbo
+OPENAI_BASE_URL=https://api.deepseek.com/v1      # 或其他 OpenAI 兼容 API
+LLM_MODEL=deepseek-v4-flash
+
+# 中国大陆用户：huggingface.co 无法访问时设置镜像
+export HF_ENDPOINT=https://hf-mirror.com
+
+# Embedding 模型（共指消解）
+#   all-MiniLM-L6-v2              → sentence-transformers 本地（默认）
+#   openai/text-embedding-3-small → OpenAI API
+#   gemini/text-embedding-004     → Google Gemini API（需 GEMINI_API_KEY）
+# 注意：DeepSeek 不提供 embeddings API
 EMBEDDING_MODEL=all-MiniLM-L6-v2
+
 MCTS_ITERATIONS=10000
-MCTS_TIME_BUDGET_SEC=300
 ```
+#### Embedding 模型
+
+| `EMBEDDING_MODEL` | 后端 | 凭证 |
+|---|---|---|
+| `all-MiniLM-L6-v2` (默认) | sentence-transformers 本地 | 无 |
+| `openai/text-embedding-3-small` | OpenAI API | `EMBEDDING_API_KEY`（可省略，默认同 `OPENAI_API_KEY`） |
+| `gemini/text-embedding-004` | Google Gemini API | `GEMINI_API_KEY` |
+
+> DeepSeek 不提供 embeddings API，使用 `deepseek/` 前缀将报错提示。
+
+#### 角色名推断与覆盖
+
+CNGE 自动从因果节点 label 推断角色名，使用**数据驱动的最长公共前缀（LCP）**算法而非硬编码正则，因此 "龙皓晨" 不会被截断为 "龙皓"。
+
+若自动推断不理想，可通过 `.env` 显式指定：
+
+```
+CHARACTER_LIST=龙皓晨,巴尔扎,小女孩,白衣人,众少年
+```
+
+API embedder 复用 `.env` 中已有凭证，切换只需修改 `EMBEDDING_MODEL` 一行。
 
 ---
 
@@ -191,6 +227,26 @@ python -m storydag.cnge.auditor.app outputs/我的剧本/causal_graph.json
 - **边编辑**：点击任意边修改 type / strength
 - **增删操作**：工具栏"添加节点""添加边"模式，点击画布空白/节点即可创建
 - **保存回写**：编辑后"保存"按钮写回 `causal_graph.json`，拓扑序自动重建
+
+---
+
+## Demo Video
+
+4 分钟演示视频展示长篇网络小说从 `python -m storydag run` 到完整剧本、因果图可视化、量化指标的全过程。
+
+### 分镜表
+
+| 时间 | 片段 | 内容 | 画面 |
+|------|------|------|------|
+| 0-12s | 开场 | StoryDAG 标题 + 一句价值主张 | 自动生成标题卡 |
+| 12-30s | 问题陈述 | 现有方案三大缺陷 | 自动生成对比卡 |
+| 30-42s | 管线架构 | 四模块 + 数据流 | 自动生成架构图 |
+| 42-82s | 终端录制 | 管线实际运行全过程 | 你的屏幕录像 |
+| 82-94s | 因果图介绍 | 节点数、边数、因果链示例 | 自动生成统计卡 |
+| 94-124s | Auditor 录制 | vis.js 可视化操作 | 你的屏幕录像 |
+| 124-144s | 剧本展示 | script.yaml 结构 + 可追溯字段 | 你的录像 / 自动生成卡 |
+| 144-162s | 指标面板 | CCR=100%、plot_holes=0、backlink | 自动生成仪表盘 |
+| 162-174s | 收尾 | 开源地址 + 一行命令 | 自动生成结束卡 |
 
 ---
 

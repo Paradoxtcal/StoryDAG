@@ -2,9 +2,11 @@
 
 from __future__ import annotations
 
+import sys
 from typing import Any, Dict, List, Optional, Sequence, Union
 
 from openai import OpenAI
+from openai import APITimeoutError, APIConnectionError
 
 from storydag.config import get_optional_env, get_required_env, load_env
 from storydag.llm.types import ChatMessage, LLMResponse, TokenLogprob
@@ -15,9 +17,11 @@ MessageInput = Union[ChatMessage, Dict[str, Any]]
 class LLMClient:
     """Thin wrapper around the OpenAI SDK for StoryDAG pipeline modules.
 
-    CNGE uses ``temperature=0`` and ``json_mode=True`` for deterministic
-    causal-triple extraction. CGCA may request ``logprobs`` for future
-    logit-gating integration.
+    CNGE uses ``temperature=0`` for deterministic causal-triple extraction.
+    ``json_mode`` is **not** used by default because some providers
+    (DeepSeek, Ollama, vLLM) may not support ``response_format:
+    {"type": "json_object"}``; the system prompt + few-shot examples
+    already enforce JSON output.
     """
 
     def __init__(
@@ -26,7 +30,7 @@ class LLMClient:
         api_key: str,
         base_url: str = "https://api.openai.com/v1",
         model: str = "gpt-4-turbo",
-        timeout: float = 120.0,
+        timeout: float = 60.0,
         client: Optional[OpenAI] = None,
     ) -> None:
         self.api_key = api_key
@@ -37,16 +41,23 @@ class LLMClient:
             api_key=api_key,
             base_url=self.base_url,
             timeout=timeout,
+            max_retries=0,  # we handle retries ourselves
         )
 
     @classmethod
     def from_env(cls, env: Optional[Dict[str, str]] = None) -> "LLMClient":
-        """Build a client from ``.env`` / process environment variables."""
-        values = env or load_env()
+        """Build a client from ``.env`` / process environment variables.
+
+        Supports ``OPENAI_TIMEOUT`` (default 180s) for providers with
+        slower inference (DeepSeek, local models).
+        """
+        values = env if env is not None else load_env()
+        timeout = float(get_optional_env(values, "OPENAI_TIMEOUT", "180"))
         return cls(
             api_key=get_required_env(values, "OPENAI_API_KEY"),
             base_url=get_optional_env(values, "OPENAI_BASE_URL", "https://api.openai.com/v1"),
             model=get_optional_env(values, "LLM_MODEL", "gpt-4-turbo"),
+            timeout=timeout,
         )
 
     def chat(
@@ -76,7 +87,20 @@ class LLMClient:
             if top_logprobs is not None:
                 kwargs["top_logprobs"] = top_logprobs
 
-        completion = self._client.chat.completions.create(**kwargs)
+        try:
+            completion = self._client.chat.completions.create(**kwargs)
+        except APITimeoutError:
+            raise ConnectionError(
+                f"LLM API 请求超时（{self.timeout}s），请检查模型可用性或增大 timeout"
+            ) from None
+        except APIConnectionError as exc:
+            raise ConnectionError(
+                f"无法连接到 LLM API（{self.base_url}），请检查网络与 BASE_URL"
+            ) from exc
+        except Exception as exc:
+            raise RuntimeError(
+                f"LLM API 调用失败: {exc}"
+            ) from exc
         choice = completion.choices[0]
         content = choice.message.content or ""
 
@@ -109,6 +133,34 @@ class LLMClient:
             token_logprobs=token_logprobs,
             raw=completion,
         )
+
+    def ping(self) -> bool:
+        """Test connectivity with a minimal request.
+
+        Returns ``True`` if the API responds, ``False`` otherwise (writes
+        a diagnostic to stderr).
+        """
+        try:
+            self._client.chat.completions.create(
+                model=self.model,
+                messages=[{"role": "user", "content": "ping"}],
+                max_tokens=1,
+                temperature=0.0,
+            )
+            return True
+        except APIConnectionError as exc:
+            print(
+                f"  错误：无法连接到 {self.base_url}/chat/completions\n"
+                f"        请检查 OPENAI_BASE_URL 和网络连接。\n"
+                f"        ({exc})",
+                file=sys.stderr,
+            )
+            return False
+        except Exception as exc:
+            # A 4xx/5xx response means we *did* connect, so the URL is valid.
+            # This is fine — the model/key might not match but that will
+            # surface during actual extraction.
+            return True
 
     def complete(
         self,
