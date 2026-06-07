@@ -5,7 +5,7 @@
 将长篇小说自动转化为结构化的、因果可审计的多幕剧本。管线由四个算法模块构成，每个模块产出可独立验证的中间工件。
 
 <p align="center">
-  <video src="https://raw.githubusercontent.com/Paradoxtcal/StoryDAG/feature/17-readme-demo/storydag_demo.mp4" controls width="100%"></video>
+  <video src="https://raw.githubusercontent.com/Paradoxtcal/StoryDAG/main/storydag_demo.mp4" controls width="100%"></video>
 </p>
 
 ---
