@@ -6,6 +6,7 @@ import argparse
 import sys
 from pathlib import Path
 
+from storydag.llm.client import LLMClient
 from storydag.pipeline import default_output_dir, run_pipeline
 
 
@@ -23,6 +24,12 @@ def build_parser() -> argparse.ArgumentParser:
         "--output",
         help="Output directory (default: outputs/{title})",
     )
+    run_parser.add_argument(
+        "--quiet",
+        action="store_true",
+        default=False,
+        help="Suppress progress output (useful for scripting)",
+    )
     return parser
 
 
@@ -33,12 +40,38 @@ def cmd_run(args: argparse.Namespace) -> int:
         return 1
 
     output_dir = Path(args.output) if args.output else default_output_dir(args.title)
-    result = run_pipeline(novel_path, args.title, output_dir=output_dir)
 
-    print(f"因果图: {result.output_dir / 'causal_graph.json'}")
-    print(f"剧本:   {result.output_dir / 'script.yaml'}")
-    print(f"指标:   {result.output_dir / 'metrics.json'}")
-    print(f"CCR:    {result.metrics.ccr:.2%} ({result.metrics.satisfied_edge_count}/{result.metrics.total_edges})")
+    # Cache env-loaded client to avoid re-reading .env
+    client = LLMClient.from_env()
+
+    if not args.quiet:
+        print(f"  模型:  {client.model}", file=sys.stderr)
+        print(f"  API:   {client.base_url}/chat/completions", file=sys.stderr)
+        print(f"  验活:  ", file=sys.stderr, end="", flush=True)
+        alive = client.ping()
+        if alive:
+            print("✓", file=sys.stderr)
+        else:
+            print("✗", file=sys.stderr)
+            print(file=sys.stderr)
+            print(f"  无法连接到 API，请检查 .env 配置。", file=sys.stderr)
+            return 1
+
+    try:
+        result = run_pipeline(novel_path, args.title, output_dir=output_dir, quiet=args.quiet)
+    except Exception as exc:
+        print(file=sys.stderr)
+        print(f"  ✗ 管线执行失败: {exc}", file=sys.stderr)
+        print(file=sys.stderr)
+        return 1
+
+    print(file=sys.stderr)
+    print(f"  ✓ 管线完成", file=sys.stderr)
+    print(f"    因果图: {result.output_dir / 'causal_graph.json'}", file=sys.stderr)
+    print(f"    剧本:   {result.output_dir / 'script.yaml'}", file=sys.stderr)
+    print(f"    指标:   {result.output_dir / 'metrics.json'}", file=sys.stderr)
+    print(f"    CCR:    {result.metrics.ccr:.2%} ({result.metrics.satisfied_edge_count}/{result.metrics.total_edges})", file=sys.stderr)
+    print(file=sys.stderr)
     return 0
 
 

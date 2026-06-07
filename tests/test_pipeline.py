@@ -102,6 +102,27 @@ def test_discover_characters_from_graph():
     assert discover_characters(graph) == ["林远"]
 
 
+def test_discover_characters_with_explicit_list():
+    graph = extract_causal_graph(
+        "林远得知秘密，林远决定行动，林远潜入后山。",
+        _mock_client(),
+        _fast_config(),
+        embedder=_orthogonal_embedder,
+    )
+    # explicit list overrides inference
+    assert discover_characters(graph, explicit=["林远", "张三"]) == ["张三", "林远"]
+
+
+def test_pipeline_config_from_env_reads_character_list():
+    config = PipelineConfig.from_env({"CHARACTER_LIST": "龙皓晨, 巴尔扎, 小女孩"})
+    assert config.characters == ["龙皓晨", "巴尔扎", "小女孩"]
+
+
+def test_pipeline_config_from_env_empty_character_list_is_none():
+    config = PipelineConfig.from_env({})
+    assert config.characters is None
+
+
 def test_extract_causal_graph_builds_chain_dag():
     graph = extract_causal_graph(
         "林远得知秘密，林远决定行动，林远潜入后山。",

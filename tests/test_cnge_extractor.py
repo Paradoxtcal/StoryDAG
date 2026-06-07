@@ -85,7 +85,10 @@ def test_build_extraction_messages_includes_scene_id_and_few_shots():
     assert "场景正文" in messages[-1].content
 
 
-def test_extract_triples_from_text_calls_llm_with_json_mode():
+def test_extract_triples_from_text_uses_prompt_not_json_mode():
+    """Cross-provider compat: we rely on the system prompt rather than
+    ``response_format: {"type": "json_object"}`` because DeepSeek /
+    Ollama / vLLM may reject that parameter."""
     client = LLMClient(api_key="k", base_url="https://example.com/v1")
     client._client = MagicMock()
     client._client.chat.completions.create = MagicMock(
@@ -109,7 +112,8 @@ def test_extract_triples_from_text_calls_llm_with_json_mode():
 
     call_kwargs = client._client.chat.completions.create.call_args.kwargs
     assert call_kwargs["temperature"] == 0.0
-    assert call_kwargs["response_format"] == {"type": "json_object"}
+    # json_mode is NOT passed — cross-provider compat
+    assert "response_format" not in call_kwargs
 
 
 def test_extract_triples_accepts_scene_object():

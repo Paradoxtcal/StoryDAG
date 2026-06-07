@@ -112,7 +112,8 @@ def test_generate_character_line_returns_backlinks():
     line = generate_character_line(
         graph,
         history,
-        scene_context="夜色笼罩后山。",
+        scene_setting="后山夜探",
+        scene_description="夜色笼罩后山。",
         character="林远",
         client=client,
     )
